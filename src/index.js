@@ -677,7 +677,7 @@ export function Viewer(data, font) {
 
         return { min: { x: minX, y: minY }, max: { x: maxX, y: maxY } };
     }
-
+    return scene;
 }
 
 
