@@ -85,7 +85,7 @@ function getBulgeCurvePoints(startPoint, endPoint, bulge, segments) {
  * @param {Object} font - a font loaded with THREE.FontLoader 
  * @constructor
  */
-export function Viewer(data, container, camera, rerender, onDragStart, onDragEnd, font) {
+export function Viewer(data, container, camera, rerender, onDragStart, onDragEnd, onHoverStart, onHoverEnd, font) {
 
     createLineTypeShaders(data);
 
@@ -692,6 +692,9 @@ export function Viewer(data, container, camera, rerender, onDragStart, onDragEnd
     dragControls.addEventListener('dragstart', onDragStart);
     dragControls.addEventListener('dragend', onDragEnd);
 
+
+    dragControls.addEventListener('hoveron', onHoverStart);
+    dragControls.addEventListener('hoveroff', onHoverEnd);
 
     return scene;
 }
