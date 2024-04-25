@@ -1,15 +1,17 @@
 import * as THREE from 'three';
+
 import { BufferGeometry, Color, Float32BufferAttribute, Vector3 } from 'three';
-import { OrbitControls } from './OrbitControls';
 import bSpline from './bspline';
 import { Text } from 'troika-three-text'
 import { parseDxfMTextContent } from '@dxfom/mtext';
+import DragControls from './DragControls'
+
 
 const textControlCharactersRegex = /\\[AXQWOoLIpfH].*;/g;
 const curlyBraces = /\\[{}]/g;
 
 // Three.js extension functions. Webpack doesn't seem to like it if we modify the THREE object directly.
-var THREEx = { Math: {} };
+const THREEx = { Math: {} };
 /**
  * Returns the angle in radians of the vector (p1,p2). In other words, imagine
  * putting the base of the vector at coordinates (0,0) and finding the angle
@@ -19,8 +21,8 @@ var THREEx = { Math: {} };
  * @return {Number} the angle
  */
 THREEx.Math.angle2 = function (p1, p2) {
-    var v1 = new THREE.Vector2(p1.x, p1.y);
-    var v2 = new THREE.Vector2(p2.x, p2.y);
+    let v1 = new THREE.Vector2(p1.x, p1.y);
+    let v2 = new THREE.Vector2(p2.x, p2.y);
     v2.sub(v1); // sets v2 to be our chord
     v2.normalize();
     if (v2.y < 0) return -Math.acos(v2.x);
@@ -29,7 +31,7 @@ THREEx.Math.angle2 = function (p1, p2) {
 
 
 THREEx.Math.polar = function (point, distance, angle) {
-    var result = {};
+    let result = {};
     result.x = point.x + distance * Math.cos(angle);
     result.y = point.y + distance * Math.sin(angle);
     return result;
@@ -44,12 +46,12 @@ THREEx.Math.polar = function (point, distance, angle) {
  */
 function getBulgeCurvePoints(startPoint, endPoint, bulge, segments) {
 
-    var vertex, i,
+    let vertex, i,
         center, p0, p1, angle,
         radius, startAngle,
         thetaAngle;
 
-    var obj = {};
+    let obj = {};
     obj.startPoint = p0 = startPoint ? new THREE.Vector2(startPoint.x, startPoint.y) : new THREE.Vector2(0, 0);
     obj.endPoint = p1 = endPoint ? new THREE.Vector2(endPoint.x, endPoint.y) : new THREE.Vector2(1, 0);
     obj.bulge = bulge = bulge || 1;
@@ -62,7 +64,7 @@ function getBulgeCurvePoints(startPoint, endPoint, bulge, segments) {
     startAngle = THREEx.Math.angle2(center, p0);
     thetaAngle = angle / segments;
 
-    var vertices = [];
+    let vertices = [];
 
     vertices.push(new THREE.Vector3(p0.x, p0.y, 0));
 
@@ -83,15 +85,17 @@ function getBulgeCurvePoints(startPoint, endPoint, bulge, segments) {
  * @param {Object} font - a font loaded with THREE.FontLoader 
  * @constructor
  */
-export function Viewer(data, font) {
+export function Viewer(data, container, camera, rerender, onDragStart, onDragEnd, font) {
 
     createLineTypeShaders(data);
 
-    var scene = new THREE.Scene();
+    const scene = new THREE.Scene();
+    const group = new THREE.Group();
+
 
     // Create scene from dxf object (data)
-    var i, entity, obj, min_x, min_y, min_z, max_x, max_y, max_z;
-    var dims = {
+    let i, entity, obj, min_x, min_y, min_z, max_x, max_y, max_z;
+    let dims = {
         min: { x: 0, y: 0, z: 0 },
         max: { x: 0, y: 0, z: 0 }
     };
@@ -100,20 +104,20 @@ export function Viewer(data, font) {
         obj = drawEntity(entity, data);
 
         if (obj) {
-            var bbox = new THREE.Box3().setFromObject(obj);
+            let bbox = new THREE.Box3().setFromObject(obj);
             if (isFinite(bbox.min.x) && (dims.min.x > bbox.min.x)) dims.min.x = bbox.min.x;
             if (isFinite(bbox.min.y) && (dims.min.y > bbox.min.y)) dims.min.y = bbox.min.y;
             if (isFinite(bbox.min.z) && (dims.min.z > bbox.min.z)) dims.min.z = bbox.min.z;
             if (isFinite(bbox.max.x) && (dims.max.x < bbox.max.x)) dims.max.x = bbox.max.x;
             if (isFinite(bbox.max.y) && (dims.max.y < bbox.max.y)) dims.max.y = bbox.max.y;
             if (isFinite(bbox.max.z) && (dims.max.z < bbox.max.z)) dims.max.z = bbox.max.z;
-            scene.add(obj);
+            group.add(obj);
         }
         obj = null;
     }
 
     function drawEntity(entity, data) {
-        var mesh;
+        let mesh;
         if (entity.type === 'CIRCLE' || entity.type === 'ARC') {
             mesh = drawArc(entity, data);
         } else if (entity.type === 'LWPOLYLINE' || entity.type === 'LINE' || entity.type === 'POLYLINE') {
@@ -133,7 +137,7 @@ export function Viewer(data, font) {
         } else if (entity.type === 'ELLIPSE') {
             mesh = drawEllipse(entity, data);
         } else if (entity.type === 'DIMENSION') {
-            var dimTypeEnum = entity.dimensionType & 7;
+            let dimTypeEnum = entity.dimensionType & 7;
             if (dimTypeEnum === 0) {
                 mesh = drawDimension(entity, data);
             } else {
@@ -147,13 +151,13 @@ export function Viewer(data, font) {
     }
 
     function drawEllipse(entity, data) {
-        var color = getColor(entity, data);
+        let color = getColor(entity, data);
 
-        var xrad = Math.sqrt(Math.pow(entity.majorAxisEndPoint.x, 2) + Math.pow(entity.majorAxisEndPoint.y, 2));
-        var yrad = xrad * entity.axisRatio;
-        var rotation = Math.atan2(entity.majorAxisEndPoint.y, entity.majorAxisEndPoint.x);
+        let xrad = Math.sqrt(Math.pow(entity.majorAxisEndPoint.x, 2) + Math.pow(entity.majorAxisEndPoint.y, 2));
+        let yrad = xrad * entity.axisRatio;
+        let rotation = Math.atan2(entity.majorAxisEndPoint.y, entity.majorAxisEndPoint.x);
 
-        var curve = new THREE.EllipseCurve(
+        let curve = new THREE.EllipseCurve(
             entity.center.x, entity.center.y,
             xrad, yrad,
             entity.startAngle, entity.endAngle,
@@ -161,29 +165,29 @@ export function Viewer(data, font) {
             rotation
         );
 
-        var points = curve.getPoints(50);
-        var geometry = new THREE.BufferGeometry().setFromPoints(points);
-        var material = new THREE.LineBasicMaterial({ linewidth: 1, color: color });
+        let points = curve.getPoints(50);
+        let geometry = new THREE.BufferGeometry().setFromPoints(points);
+        let material = new THREE.LineBasicMaterial({ linewidth: 1, color: color });
 
         // Create the final object to add to the scene
-        var ellipse = new THREE.Line(geometry, material);
+        let ellipse = new THREE.Line(geometry, material);
         return ellipse;
     }
 
     function drawMtext(entity, data) {
-        var color = getColor(entity, data);
+        let color = getColor(entity, data);
 
         if (!font) { return console.log('font parameter not set. Ignoring text entity.') }
 
-        var textAndControlChars = parseDxfMTextContent(entity.text);
+        let textAndControlChars = parseDxfMTextContent(entity.text);
 
         //Note: We currently only support a single format applied to all the mtext text
-        var content = mtextContentAndFormattingToTextAndStyle(textAndControlChars, entity, color);
+        let content = mtextContentAndFormattingToTextAndStyle(textAndControlChars, entity, color);
 
-        var txt = createTextForScene(content.text, content.style, entity, color);
+        let txt = createTextForScene(content.text, content.style, entity, color);
         if (!txt) return null;
 
-        var group = new THREE.Object3D();
+        let group = new THREE.Object3D();
         group.add(txt);
         return group;
     }
@@ -194,7 +198,7 @@ export function Viewer(data, font) {
             textHeight: entity.height
         }
 
-        var text = [];
+        let text = [];
         for (let item of textAndControlChars) {
             if (typeof item === 'string') {
                 if (item.startsWith('pxq') && item.endsWith(';')) {
@@ -210,7 +214,7 @@ export function Viewer(data, font) {
                     text.push(item);
                 }
             } else if (Array.isArray(item)) {
-                var nestedFormat = mtextContentAndFormattingToTextAndStyle(item, entity, color);
+                let nestedFormat = mtextContentAndFormattingToTextAndStyle(item, entity, color);
                 text.push(nestedFormat.text);
             } else if (typeof item === 'object') {
                 if (item['S'] && item['S'].length === 3) {
@@ -246,7 +250,7 @@ export function Viewer(data, font) {
             textEnt.rotation.z = entity.rotation * Math.PI / 180;
         }
         if (entity.directionVector) {
-            var dv = entity.directionVector;
+            let dv = entity.directionVector;
             textEnt.rotation.z = new THREE.Vector3(1, 0, 0).angleTo(new THREE.Vector3(dv.x, dv.y, dv.z));
         }
         switch (entity.attachmentPoint) {
@@ -305,7 +309,7 @@ export function Viewer(data, font) {
         textEnt.sync(() => {
             if (textEnt.textAlign !== 'left') {
                 textEnt.geometry.computeBoundingBox();
-                var textWidth = textEnt.geometry.boundingBox.max.x - textEnt.geometry.boundingBox.min.x;
+                let textWidth = textEnt.geometry.boundingBox.max.x - textEnt.geometry.boundingBox.min.x;
                 if (textEnt.textAlign === 'center') textEnt.position.x += (entity.width - textWidth) / 2;
                 if (textEnt.textAlign === 'right') textEnt.position.x += (entity.width - textWidth);
             }
@@ -315,13 +319,13 @@ export function Viewer(data, font) {
     }
 
     function drawSpline(entity, data) {
-        var color = getColor(entity, data);
+        let color = getColor(entity, data);
 
-        var points = getBSplinePolyline(entity.controlPoints, entity.degreeOfSplineCurve, entity.knotValues, 100);
+        let points = getBSplinePolyline(entity.controlPoints, entity.degreeOfSplineCurve, entity.knotValues, 100);
 
-        var geometry = new THREE.BufferGeometry().setFromPoints(points);
-        var material = new THREE.LineBasicMaterial({ linewidth: 1, color: color });
-        var splineObject = new THREE.Line(geometry, material);
+        let geometry = new THREE.BufferGeometry().setFromPoints(points);
+        let material = new THREE.LineBasicMaterial({ linewidth: 1, color: color });
+        let splineObject = new THREE.Line(geometry, material);
 
         return splineObject;
     }
@@ -372,7 +376,7 @@ export function Viewer(data, font) {
     function drawLine(entity, data) {
         let points = [];
         let color = getColor(entity, data);
-        var material, lineType, vertex, startPoint, endPoint, bulgeGeometry,
+        let material, lineType, vertex, startPoint, endPoint, bulgeGeometry,
             bulge, i, line;
 
         if (!entity.vertices) return console.log('entity missing vertices.');
@@ -408,14 +412,14 @@ export function Viewer(data, font) {
             material = new THREE.LineBasicMaterial({ linewidth: 1, color: color });
         }
 
-        var geometry = new BufferGeometry().setFromPoints(points);
+        let geometry = new BufferGeometry().setFromPoints(points);
 
         line = new THREE.Line(geometry, material);
         return line;
     }
 
     function drawArc(entity, data) {
-        var startAngle, endAngle;
+        let startAngle, endAngle;
         if (entity.type === 'CIRCLE') {
             startAngle = entity.startAngle || 0;
             endAngle = startAngle + 2 * Math.PI;
@@ -424,18 +428,18 @@ export function Viewer(data, font) {
             endAngle = entity.endAngle;
         }
 
-        var curve = new THREE.ArcCurve(
+        let curve = new THREE.ArcCurve(
             0, 0,
             entity.radius,
             startAngle,
             endAngle);
 
-        var points = curve.getPoints(32);
-        var geometry = new THREE.BufferGeometry().setFromPoints(points);
+        let points = curve.getPoints(32);
+        let geometry = new THREE.BufferGeometry().setFromPoints(points);
 
-        var material = new THREE.LineBasicMaterial({ color: getColor(entity, data) });
+        let material = new THREE.LineBasicMaterial({ color: getColor(entity, data) });
 
-        var arc = new THREE.Line(geometry, material);
+        let arc = new THREE.Line(geometry, material);
         arc.position.x = entity.center.x;
         arc.position.y = entity.center.y;
         arc.position.z = entity.center.z;
@@ -445,15 +449,15 @@ export function Viewer(data, font) {
 
     function addTriangleFacingCamera(verts, p0, p1, p2) {
         // Calculate which direction the points are facing (clockwise or counter-clockwise)
-        var vector1 = new Vector3();
-        var vector2 = new Vector3();
+        let vector1 = new Vector3();
+        let vector2 = new Vector3();
         vector1.subVectors(p1, p0);
         vector2.subVectors(p2, p0);
         vector1.cross(vector2);
 
-        var v0 = new Vector3(p0.x, p0.y, p0.z);
-        var v1 = new Vector3(p1.x, p1.y, p1.z);
-        var v2 = new Vector3(p2.x, p2.y, p2.z);
+        let v0 = new Vector3(p0.x, p0.y, p0.z);
+        let v1 = new Vector3(p1.x, p1.y, p1.z);
+        let v2 = new Vector3(p2.x, p2.y, p2.z);
 
         // If z < 0 then we must draw these in reverse order
         if (vector1.z < 0) {
@@ -464,10 +468,10 @@ export function Viewer(data, font) {
     }
 
     function drawSolid(entity, data) {
-        var material, verts,
+        let material, verts,
             geometry = new THREE.BufferGeometry();
 
-        var points = entity.points;
+        let points = entity.points;
         // verts = geometry.vertices;
         verts = [];
         addTriangleFacingCamera(verts, points[0], points[1], points[2]);
@@ -480,7 +484,7 @@ export function Viewer(data, font) {
     }
 
     function drawText(entity, data) {
-        var geometry, material, text;
+        let geometry, material, text;
 
         if (!font)
             return console.warn('Text is not supported without a Three.js font loaded with THREE.FontLoader! Load a font of your choice and pass this into the constructor. See the sample for this repository or Three.js examples at http://threejs.org/examples/?q=text#webgl_geometry_text for more details.');
@@ -488,7 +492,7 @@ export function Viewer(data, font) {
         geometry = new THREE.TextGeometry(entity.text, { font: font, height: 0, size: entity.textHeight || 12 });
 
         if (entity.rotation) {
-            var zRotation = entity.rotation * Math.PI / 180;
+            let zRotation = entity.rotation * Math.PI / 180;
             geometry.rotateZ(zRotation);
         }
 
@@ -503,33 +507,33 @@ export function Viewer(data, font) {
     }
 
     function drawPoint(entity, data) {
-        var geometry, material, point;
+        let geometry, material, point;
 
         geometry = new THREE.BufferGeometry();
 
         geometry.setAttribute('position', new Float32BufferAttribute([entity.position.x, entity.position.y, entity.position.z], 3));
 
-        var color = getColor(entity, data);
+        let color = getColor(entity, data);
 
         material = new THREE.PointsMaterial({ size: 0.1, color: new Color(color) });
         point = new THREE.Points(geometry, material);
-        scene.add(point);
+        group.add(point);
     }
 
     function drawDimension(entity, data) {
-        var block = data.blocks[entity.block];
+        let block = data.blocks[entity.block];
 
         if (!block || !block.entities) return null;
 
-        var group = new THREE.Object3D();
+        let group = new THREE.Object3D();
         // if(entity.anchorPoint) {
         //     group.position.x = entity.anchorPoint.x;
         //     group.position.y = entity.anchorPoint.y;
         //     group.position.z = entity.anchorPoint.z;
         // }
 
-        for (var i = 0; i < block.entities.length; i++) {
-            var childEntity = drawEntity(block.entities[i], data, group);
+        for (let i = 0; i < block.entities.length; i++) {
+            let childEntity = drawEntity(block.entities[i], data, group);
             if (childEntity) group.add(childEntity);
         }
 
@@ -537,11 +541,11 @@ export function Viewer(data, font) {
     }
 
     function drawBlock(entity, data) {
-        var block = data.blocks[entity.name];
+        let block = data.blocks[entity.name];
 
         if (!block.entities) return null;
 
-        var group = new THREE.Object3D()
+        let group = new THREE.Object3D()
 
         if (entity.xScale) group.scale.x = entity.xScale;
         if (entity.yScale) group.scale.y = entity.yScale;
@@ -556,8 +560,8 @@ export function Viewer(data, font) {
             group.position.z = entity.position.z;
         }
 
-        for (var i = 0; i < block.entities.length; i++) {
-            var childEntity = drawEntity(block.entities[i], data, group);
+        for (let i = 0; i < block.entities.length; i++) {
+            let childEntity = drawEntity(block.entities[i], data, group);
             if (childEntity) group.add(childEntity);
         }
 
@@ -565,7 +569,7 @@ export function Viewer(data, font) {
     }
 
     function getColor(entity, data) {
-        var color = 0x000000; //default
+        let color = 0x000000; //default
         if (entity.color) color = entity.color;
         else if (data.tables && data.tables.layer && data.tables.layer.layers[entity.layer])
             color = data.tables.layer.layers[entity.layer].color;
@@ -577,9 +581,9 @@ export function Viewer(data, font) {
     }
 
     function createLineTypeShaders(data) {
-        var ltype, type;
+        let ltype, type;
         if (!data.tables || !data.tables.lineType) return;
-        var ltypes = data.tables.lineType.lineTypes;
+        let ltypes = data.tables.lineType.lineTypes;
 
         for (type in ltypes) {
             ltype = ltypes[type];
@@ -589,7 +593,7 @@ export function Viewer(data, font) {
     }
 
     function createDashedLineShader(pattern) {
-        var i,
+        let i,
             dashedLineShader = {},
             totalLength = 0.0;
 
@@ -665,8 +669,8 @@ export function Viewer(data, font) {
     }
 
     function findExtents(scene) {
-        for (var child of scene.children) {
-            var minX, maxX, minY, maxY;
+        for (let child of scene.children) {
+            let minX, maxX, minY, maxY;
             if (child.position) {
                 minX = Math.min(child.position.x, minX);
                 minY = Math.min(child.position.y, minY);
@@ -677,9 +681,22 @@ export function Viewer(data, font) {
 
         return { min: { x: minX, y: minY }, max: { x: maxX, y: maxY } };
     }
+    scene.add(group);
+
+    var dragControls = new DragControls( [group], camera, container, {} );
+
+    dragControls.transformGroup = true;
+    dragControls.recursive = false;
+    dragControls.addEventListener( 'drag', ()=> rerender());
+
+    dragControls.addEventListener('dragstart', onDragStart);
+    dragControls.addEventListener('dragend', onDragEnd);
+
+
     return scene;
 }
 
 
 
 
+ 
