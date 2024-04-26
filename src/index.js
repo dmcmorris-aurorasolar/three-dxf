@@ -377,6 +377,8 @@ export function Viewer(data, container, camera, rerender, onDragStart, onDragEnd
     function drawLine(entity, data) {
         let points = [];
         let color = getColor(entity, data);
+
+
         let material, lineType, vertex, startPoint, endPoint, bulgeGeometry,
             bulge, i, line;
 
@@ -416,6 +418,16 @@ export function Viewer(data, container, camera, rerender, onDragStart, onDragEnd
         let geometry = new BufferGeometry().setFromPoints(points);
 
         line = new THREE.Line(geometry, material);
+
+        if (color == 16711935) {
+            console.log('rendering roof entity', {entity, points, line});
+        }
+
+        if (color == 65535) {
+            console.log('rendering keepouf entity', {entity, points, line});
+        }
+
+        
         return line;
     }
 
@@ -700,7 +712,7 @@ export function Viewer(data, container, camera, rerender, onDragStart, onDragEnd
 
     const overlayMesh = drawSolid(overlayEntity, data);
     overlayMesh.material.transparent = true;
-    overlayMesh.material.opacity = 0.3;
+    overlayMesh.material.opacity = 0.5;
     overlayMesh.position.z = -0.01;
     group.add(overlayMesh);
     
@@ -720,14 +732,22 @@ export function Viewer(data, container, camera, rerender, onDragStart, onDragEnd
     dragControls.addEventListener('hoveroff', onHoverEnd);
 
     const potentialFieldSegments = data.entities.filter(entity => 
-        entity.layer == '03 Roof Edge' &&
-        (entity.type === 'LWPOLYLINE' || entity.type === 'POLYLINE')    
+        entity.layer.startsWith('02 - Building Outline')).filter(entity =>
+            {
+                console.log(entity);
+                return (entity.type === 'LWPOLYLINE' || entity.type === 'POLYLINE')    
+            }   
+    ).map((entity) => entity.vertices);
+    console.log(data.entities);
+    const potentialKeepOuts = data.entities.filter(entity => 
+        entity.layer.startsWith('03 - Roof Obstructions')).filter(entity =>
+            {
+                console.log(entity);
+                return (entity.type === 'LWPOLYLINE' || entity.type === 'POLYLINE')    
+            }
     ).map((entity) => entity.vertices);
 
-    const potentialKeepOuts = data.entities.filter(entity => 
-        entity.layer == '04 Keepouts' &&
-        (entity.type === 'LWPOLYLINE' || entity.type === 'POLYLINE')    
-    ).map((entity) => entity.vertices);
+    console.log('full dxf', data);
 
     return {scene, potentialFieldSegments, potentialKeepOuts};
 }
