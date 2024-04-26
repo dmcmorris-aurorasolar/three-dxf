@@ -92,7 +92,6 @@ export function Viewer(data, container, camera, rerender, onDragStart, onDragEnd
     const scene = new THREE.Scene();
     const group = new THREE.Group();
 
-
     // Create scene from dxf object (data)
     let i, entity, obj, min_x, min_y, min_z, max_x, max_y, max_z;
     let dims = {
@@ -101,19 +100,21 @@ export function Viewer(data, container, camera, rerender, onDragStart, onDragEnd
     };
     for (i = 0; i < data.entities.length; i++) {
         entity = data.entities[i];
-        obj = drawEntity(entity, data);
+        if (data.tables && data.tables.layer && data.tables.layer.layers[entity.layer] && data.tables.layer.layers[entity.layer].visible) {
+            obj = drawEntity(entity, data);
 
-        if (obj) {
-            let bbox = new THREE.Box3().setFromObject(obj);
-            if (isFinite(bbox.min.x) && (dims.min.x > bbox.min.x)) dims.min.x = bbox.min.x;
-            if (isFinite(bbox.min.y) && (dims.min.y > bbox.min.y)) dims.min.y = bbox.min.y;
-            if (isFinite(bbox.min.z) && (dims.min.z > bbox.min.z)) dims.min.z = bbox.min.z;
-            if (isFinite(bbox.max.x) && (dims.max.x < bbox.max.x)) dims.max.x = bbox.max.x;
-            if (isFinite(bbox.max.y) && (dims.max.y < bbox.max.y)) dims.max.y = bbox.max.y;
-            if (isFinite(bbox.max.z) && (dims.max.z < bbox.max.z)) dims.max.z = bbox.max.z;
-            group.add(obj);
+            if (obj) {
+                let bbox = new THREE.Box3().setFromObject(obj);
+                if (isFinite(bbox.min.x) && (dims.min.x > bbox.min.x)) dims.min.x = bbox.min.x;
+                if (isFinite(bbox.min.y) && (dims.min.y > bbox.min.y)) dims.min.y = bbox.min.y;
+                if (isFinite(bbox.min.z) && (dims.min.z > bbox.min.z)) dims.min.z = bbox.min.z;
+                if (isFinite(bbox.max.x) && (dims.max.x < bbox.max.x)) dims.max.x = bbox.max.x;
+                if (isFinite(bbox.max.y) && (dims.max.y < bbox.max.y)) dims.max.y = bbox.max.y;
+                if (isFinite(bbox.max.z) && (dims.max.z < bbox.max.z)) dims.max.z = bbox.max.z;
+                group.add(obj);
+            }
+            obj = null;
         }
-        obj = null;
     }
 
     function drawEntity(entity, data) {
@@ -187,9 +188,9 @@ export function Viewer(data, container, camera, rerender, onDragStart, onDragEnd
         let txt = createTextForScene(content.text, content.style, entity, color);
         if (!txt) return null;
 
-        let group = new THREE.Object3D();
-        group.add(txt);
-        return group;
+        let txtGroup = new THREE.Object3D();
+        txtGroup.add(txt);
+        return txtGroup;
     }
 
     function mtextContentAndFormattingToTextAndStyle(textAndControlChars, entity, color) {
@@ -475,7 +476,7 @@ export function Viewer(data, container, camera, rerender, onDragStart, onDragEnd
         // verts = geometry.vertices;
         verts = [];
         addTriangleFacingCamera(verts, points[0], points[1], points[2]);
-        addTriangleFacingCamera(verts, points[1], points[2], points[3]);
+        addTriangleFacingCamera(verts, points[2], points[3], points[0]);
 
         material = new THREE.MeshBasicMaterial({ color: getColor(entity, data) });
         geometry.setFromPoints(verts);
@@ -525,7 +526,7 @@ export function Viewer(data, container, camera, rerender, onDragStart, onDragEnd
 
         if (!block || !block.entities) return null;
 
-        let group = new THREE.Object3D();
+        let dimGroup = new THREE.Object3D();
         // if(entity.anchorPoint) {
         //     group.position.x = entity.anchorPoint.x;
         //     group.position.y = entity.anchorPoint.y;
@@ -533,11 +534,11 @@ export function Viewer(data, container, camera, rerender, onDragStart, onDragEnd
         // }
 
         for (let i = 0; i < block.entities.length; i++) {
-            let childEntity = drawEntity(block.entities[i], data, group);
-            if (childEntity) group.add(childEntity);
+            let childEntity = drawEntity(block.entities[i], data);
+            if (childEntity) dimGroup.add(childEntity);
         }
 
-        return group;
+        return dimGroup;
     }
 
     function drawBlock(entity, data) {
@@ -545,27 +546,27 @@ export function Viewer(data, container, camera, rerender, onDragStart, onDragEnd
 
         if (!block.entities) return null;
 
-        let group = new THREE.Object3D()
+        let blockGroup = new THREE.Object3D()
 
-        if (entity.xScale) group.scale.x = entity.xScale;
-        if (entity.yScale) group.scale.y = entity.yScale;
+        if (entity.xScale) blockGroup.scale.x = entity.xScale;
+        if (entity.yScale) blockGroup.scale.y = entity.yScale;
 
         if (entity.rotation) {
-            group.rotation.z = entity.rotation * Math.PI / 180;
+            blockGroup.rotation.z = entity.rotation * Math.PI / 180;
         }
 
         if (entity.position) {
-            group.position.x = entity.position.x;
-            group.position.y = entity.position.y;
-            group.position.z = entity.position.z;
+            blockGroup.position.x = entity.position.x;
+            blockGroup.position.y = entity.position.y;
+            blockGroup.position.z = entity.position.z;
         }
 
         for (let i = 0; i < block.entities.length; i++) {
-            let childEntity = drawEntity(block.entities[i], data, group);
-            if (childEntity) group.add(childEntity);
+            let childEntity = drawEntity(block.entities[i], data);
+            if (childEntity) blockGroup.add(childEntity);
         }
 
-        return group;
+        return blockGroup;
     }
 
     function getColor(entity, data) {
@@ -683,6 +684,26 @@ export function Viewer(data, container, camera, rerender, onDragStart, onDragEnd
     }
     scene.add(group);
 
+    const groupBoundingBox = new THREE.Box3().setFromObject(group);
+
+    const extMin = groupBoundingBox.min;
+    const extMax = groupBoundingBox.max;
+
+    const overlayEntity = {
+        points: [
+            extMin,
+            {x: extMin.x, y: extMax.y},
+            extMax,
+            {x: extMax.x, y: extMin.y}
+        ]
+    }
+
+    const overlayMesh = drawSolid(overlayEntity, data);
+    overlayMesh.material.transparent = true;
+    overlayMesh.material.opacity = 0.3;
+    overlayMesh.position.z = -0.01;
+    group.add(overlayMesh);
+    
     var dragControls = new DragControls( [group], camera, container, {} );
 
     dragControls.transformGroup = true;
@@ -690,13 +711,25 @@ export function Viewer(data, container, camera, rerender, onDragStart, onDragEnd
     dragControls.addEventListener( 'drag', ()=> rerender());
 
     dragControls.addEventListener('dragstart', onDragStart);
-    dragControls.addEventListener('dragend', onDragEnd);
+    dragControls.addEventListener('dragend', () => {
+        onDragEnd();
+    });
 
 
     dragControls.addEventListener('hoveron', onHoverStart);
     dragControls.addEventListener('hoveroff', onHoverEnd);
 
-    return scene;
+    const potentialFieldSegments = data.entities.filter(entity => 
+        entity.layer == '03 Roof Edge' &&
+        (entity.type === 'LWPOLYLINE' || entity.type === 'POLYLINE')    
+    ).map((entity) => entity.vertices);
+
+    const potentialKeepOuts = data.entities.filter(entity => 
+        entity.layer == '04 Keepouts' &&
+        (entity.type === 'LWPOLYLINE' || entity.type === 'POLYLINE')    
+    ).map((entity) => entity.vertices);
+
+    return {scene, potentialFieldSegments, potentialKeepOuts};
 }
 
 
